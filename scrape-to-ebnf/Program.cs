@@ -1,6 +1,10 @@
-﻿using HtmlAgilityPack;
+﻿using CommandLine;
+using CommandLine.Text;
+using HtmlAgilityPack;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.Design;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
@@ -10,14 +14,55 @@ namespace scrape_to_ebnf
     {
         static void Main(string[] args)
         {
-            //var html = System.IO.File.ReadAllText("c:\\msys64\\home\\Kenne\\ecmascript-scraper\\pull.html");
+            Config config = null;
+            // Parse options, stop if we see a bogus option, or something like --help.
+            var result = new CommandLine.Parser().ParseArguments<Config>(args);
+            bool stop = false;
+            result.WithNotParsed(
+                errs =>
+                {
+                    DisplayHelp(result, errs);
+                    stop = true;
+                });
+            if (stop) return;
+            result.WithParsed(o =>
+            {
+                config = o;
+                // Overwrite the defaults with what was passed on the command line.
+                var ty = typeof(Config);
+                foreach (var prop in ty.GetProperties())
+                {
+                    if (prop.GetValue(o, null) != null)
+                    {
+                        prop.SetValue(config, prop.GetValue(o, null));
+                    }
+                }
+            });
+            if (stop) return;
+            
             string lines;
-            for(; ; )
-	        {
-		        lines = System.Console.In.ReadToEnd();
-		        if (lines != null && lines != "") break;
-	        }
-	        lines = lines.Trim();
+            if (!(config.File != null && config.File != ""))
+            {
+                if (config.Verbose)
+                {
+                    System.Console.Error.WriteLine("reading from stdin");
+                }
+                for (; ; )
+                {
+                    lines = System.Console.In.ReadToEnd();
+                    if (lines != null && lines != "") break;
+                }
+                lines = lines.Trim();
+            }
+            else
+            {
+                if (config.Verbose)
+                {
+                    System.Console.Error.WriteLine("reading from file >>>" + config.File + "<<<");
+                }
+                lines = File.ReadAllText(config.File);
+            }
+            
             var doc = new HtmlDocument();
             doc.LoadHtml(lines);
             var nodes = doc.DocumentNode.SelectNodes("//emu-annex[@id = 'sec-grammar-summary']//emu-production");
@@ -129,6 +174,25 @@ namespace scrape_to_ebnf
         {
             Regex r = new Regex("[<]/a.*[<]/");
             return text;
+        }
+
+        static void DisplayHelp<T>(ParserResult<T> result, IEnumerable<Error> errs)
+        {
+            HelpText helpText = null;
+            if (errs.IsVersion())  //check if error is version request
+                helpText = HelpText.AutoBuild(result);
+            else
+            {
+                helpText = HelpText.AutoBuild(result, h =>
+                {
+                    h.AdditionalNewLineAfterOption = false;
+                    h.Heading = "ecmascript-scrape";
+                    h.Copyright = "Copyright (c) 2023 Ken Domino"; //change copyright text
+                    h.AddPreOptionsText("");
+                    return HelpText.DefaultParsingErrorsHandler(result, h);
+                }, e => e);
+            }
+            Console.WriteLine(helpText);
         }
     }
 }

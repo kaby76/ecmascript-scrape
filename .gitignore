@@ -1,2 +1,3 @@
-pull/.vs/
 scrape-to-ebnf/.vs/
+scrape-to-ebnf/bin
+scrape-to-ebnf/obj
